@@ -1,0 +1,199 @@
+# https://docs.ansible.com/ansible/latest/playbook_guide/playbooks_delegation.html#local-playbooks
+- name: Perfect Panel
+  hosts: localhost
+  gather_facts: no
+
+  vars:
+    mysql_root_password: 12345678
+    composer_url: https://getcomposer.org/download/latest-stable/composer.phar
+  
+  tasks:
+
+    - name: install python libraries
+      apt:
+        name: python3-pymysql
+        state: present
+
+# Устанавливаем Nginx
+
+    # wget -qO - https://repo.mysql.com/RPM-GPG-KEY-mysql-2023 | sudo apt-key add -
+    - name: install nginx
+      apt: 
+        name: nginx 
+        state: present
+  
+# Обновление конфинурации Nginx
+
+    - name: nginx config
+      copy:
+        dest: /etc/nginx/nginx.conf
+        src: etc/nginx/nginx.conf
+        owner: root
+        group: root
+        mode: 0644
+      notify:
+        - restart nginx
+ 
+# Удаляем дефолтного юзера debian
+
+    - name: delete default user
+      ansible.builtin.user:
+        name: "debian"
+        remove: true
+        state: "absent"
+
+    - name: Ensure MySQL is running
+      service:
+        name: mariadb # ! not mysqld
+        state: started
+
+    # On Ubuntu you don't need password if you have socket
+    # To find socket do: ps aux | grep mysqld
+    - name: Update MySQL root password
+      mysql_user:
+        name: root
+        #password: "{{ mysql_root_password }}"
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+
+    ## https://dev.mysql.com/doc/mysql-apt-repo-quick-guide/en/
+    ## All deb packages can be found here: https://repo.mysql.com/
+
+# Выставляем таймзону сервера в UTC
+    
+    # UTC+0 
+    # To check, do: date +'UTC%:::z'
+    # alternative: timedatectl
+    - name: set timezone
+      ansible.builtin.shell:
+        cmd: ln -sf /usr/share/zoneinfo/UTC /etc/localtime
+
+# Добавление пользователя 
+
+    # ssh-keygen comes preinstalled, if it's missing install openssh-client
+    - name: install ssh-keygen
+      apt: 
+        name: openssh-client
+        state: present
+
+    - name: check if deploy user exist
+      command: id deploy
+      register: user_check
+      ignore_errors: true
+
+    - name: deploy user
+      ansible.builtin.user:
+        name: deploy
+#      when: user_check.rc == 0
+
+    # mkdir ~/.ssh
+    # chmod 700 ~/.ssh
+    - name: make sure that .ssh exist
+      file:
+        path: /home/deploy/.ssh 
+        state: directory      
+        mode: 700
+
+    # touch home/deploy/.ssh/id_rsa
+    - name: copy id_rsa
+      copy:
+        dest: /home/deploy/.ssh/id_rsa 
+        src: home/deploy/.ssh/id_rsa
+        owner: deploy
+        group: deploy
+        mode: 0600
+
+    # touch home/deploy/.ssh/id_rsa.pub
+    - name: copy id_rsa.pub
+      copy:
+        dest: /home/deploy/.ssh/id_rsa.pub
+        src: home/deploy/.ssh/id_rsa.pub
+        owner: deploy
+        group: deploy
+        mode: 0644
+
+# Строим структуру каталогов
+
+    - name: create directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: 777
+        owner: deploy
+        group: deploy
+      loop:
+        - /etc/nginx/projects_conf
+        - /etc/nginx/projects/panels
+        - /var/www/server/frontend/shared/runtime/GeoIP
+
+# Ротация логов nginx
+
+    # logs
+    - name: install logrotate
+      apt: 
+        name: logrotate
+        state: present
+
+    - name: logs
+      copy:
+        dest: /etc/logrotate.d/nginx
+        src: etc/logrotate.d/nginx
+
+    - name: install packages
+      apt:
+        name: "{{ item }}" 
+        state: present
+      loop:
+        - libfreetype6
+        - libfreetype6-dev
+        - zliblg
+        - zliblg-dev
+        - libxml2
+        - libxml2-dev
+        - gcc
+        - wget
+        - unzip
+        - htop
+        - python-setuptools
+        - python-minimal
+        - screen
+        - npm
+        - nodejs
+        - git
+        - sendmail
+        - openssl
+        - nodejs
+        - tcl
+
+
+    # https://getcomposer.org/download
+    - name: Composer | Install Composer latest-stable
+      get_url:
+        url: '{{ composer_url }}'
+        checksum: 'sha256:{{ composer_url }}.sha256sum'
+        dest: /usr/local/bin/composer.phar
+        mode: 0755
+
+    - name: Composer | Symlink composer.phar
+      file:
+        src: composer.phar
+        dest: /usr/local/bin/composer
+        state: link
+
+    #- name: reboot
+    #   ansieble.builtin.reboot:
+
+# Сайчас я тестирую ansible playbook в контейнере. 
+# Параметры ядра будет довольно проблематично протестировать из докера.
+# Для этого мало будет добавить --privileged флаг. Нужно так же сделать несколько папок доступными из конткйнера (/run/systemd/system, /bin/systemctl ...).
+# 
+# net.ipv4.ip_local_port_range
+# fs.nr_open=2000000
+# fs.file-max=5000000
+
+
+  handlers:
+    - name: restart nginx
+      service:
+        name: nginx
+        state: restarted
+      listen: "restart nginx"
