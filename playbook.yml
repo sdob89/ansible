@@ -29,7 +29,6 @@
 
 # Устанавливаем Nginx
 
-    # wget -qO - https://repo.mysql.com/RPM-GPG-KEY-mysql-2023 | sudo apt-key add -
     - name: install nginx
       apt: 
         name: nginx 
