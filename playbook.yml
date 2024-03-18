@@ -6,8 +6,21 @@
   vars:
     mysql_root_password: 12345678
     composer_url: https://getcomposer.org/download/latest-stable/composer.phar
-  
+    install_python: |
+      echo 1
+      echo 2
+      echo 3
+      TZ=Europe/Moscow date > /tmp/aaa
+
   tasks:
+
+#    - name: create install script for Python 3.9
+#      copy:
+#        dest: /tmp/aaa.sh
+#        content: "{{ install_python }}"
+#
+#    - name: run script
+#      command: bash /tmp/aaa.sh 
 
     - name: install python libraries
       apt:
@@ -42,10 +55,11 @@
         remove: true
         state: "absent"
 
-    - name: Ensure MySQL is running
-      service:
+    - name: ensure MySQL is running
+      ansible.builtin.service:
         name: mariadb # ! not mysqld
-        state: started
+        state: restarted
+
 
     # On Ubuntu you don't need password if you have socket
     # To find socket do: ps aux | grep mysqld
@@ -145,8 +159,6 @@
       loop:
         - libfreetype6
         - libfreetype6-dev
-        - zliblg
-        - zliblg-dev
         - libxml2
         - libxml2-dev
         - gcc
@@ -154,7 +166,6 @@
         - unzip
         - htop
         - python-setuptools
-        - python-minimal
         - screen
         - npm
         - nodejs

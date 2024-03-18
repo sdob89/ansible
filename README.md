@@ -1,12 +1,12 @@
-##Тест
+## Тест
 Для теста нужно собрать докер и запустить в нём энсибл плэйбук.
 
-##Докер:
+## Докер:
 
-###Сборка образа
+### Сборка образа
 ```docker build -t debian:PerfectPanel .```
 
-###Запуск
+### Запуск
 ```docker run -it -v ~/workspace/PerfectPanel:/root/PerfectPanel debian:PerfectPanel bash```
 
 ```
